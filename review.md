@@ -1,5 +1,8 @@
 % Customizable and Extensible Code
 
+TODO: I'm still not clear on how Duncan distinguishes between customizable
+and extensible.
+
 What does it mean for code to be customizable and extensible? Essentially
 it means to leave things flexible and gives freedom to the user. We'll
 explore these concepts in the context of a concrete example.
@@ -31,6 +34,7 @@ and with respect to the three functions in the diagram:
 - scheduling algorithm
 - code generator
 
+This document demonstrates
 
 ## Simple
 
@@ -40,7 +44,9 @@ Here's the simplest way to implement `task_parallel`:
 task_parallel = function(code)
 {
     tg = task_graph(code)
-    ...
+    sc = scheduler(tg)
+    code_generator(sc)
+}
 ```
 
 This has the advantage of simplicity for the user, because it implies the
@@ -84,6 +90,7 @@ task_graph = function(code, ...)
 task_graph.character = function(code, ...)
 {
     # ... Disambiguate file names from a character vector
+    TODO: use of I() here
     task_graph(parse(filename))
 }
     
@@ -93,6 +100,7 @@ task_graph.expression = function(code, ...)
 }
 ```
 
+
 `task_parallel` can handle different types of `code` arguments in 
 in two other ways, both of which have
 problems. First, we could make `task_parallel` itself a method that
@@ -100,6 +108,39 @@ dispatched on the class of `code`. This will confuse things when we
 generalize `task_parallel` later. Second, we could add statements of the
 form `if(class(code)) == "character"` inside the body of `task_parallel`.
 This might be warranted if we're sure that the conditions are simple and
-will stay simple, but if and when they grow more complex we will be better
+will stay simple, but when they grow more complex we will be better
 served by object oriented programming. These two approaches share the
-common problem of not generalizing the behavior of `task_graph`.
+common problem of not generalizing the behavior of the underlying function
+`task_graph`.
+
+
+## Extensibility
+
+In the original computational model the scheduling algorithm and the code
+generation are meant to be modular. Users can extend the capabilties of the
+system by supplying their own functions that implement scheduling or code
+generation.
+
+![modular model](modular_model.png)
+
+The code becomes:
+
+```{r}
+task_parallel = function(code, scheduler = default_scheduler,
+    code_generator = default_code_generator)
+{
+    tg = task_graph(code)
+    sc = scheduler(tg)
+    code_generator(sc)
+}
+```
+
+Now users can define and use their own scheduling algorithms, for example
+`genetic_scheduler` that uses a genetic algorithm.
+
+```{r}
+newcode = task_parallel(code, genetic_scheduler)
+```
+
+
+## Customizability
