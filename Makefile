@@ -1,4 +1,6 @@
-review.html: basic_model.png
+PNGS = $(addsuffix .png, $(basename $(wildcard *.dot)))
+
+review.html: $(PNGS)
 
 # Markdown documents
 %.html: %.md

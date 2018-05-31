@@ -1,0 +1,20 @@
+digraph G {
+rankdir = LR;
+//rankdir = TB;
+
+//edge [fontname = "courier"];
+
+node [shape = "rectangle"];
+file_name [label = "file\nname"];
+code_in_text [label = "code in\ntext"];
+parsed_code [label = "parsed\ncode"];
+output [label = "Output\nCode", fontname = "courier"];
+
+node [shape = "oval"];
+task_parallel [label = "task_parallel()", fontname = "courier"];
+
+code_in_text -> task_parallel;
+file_name -> task_parallel;
+parsed_code -> task_parallel;
+task_parallel -> output;
+}
