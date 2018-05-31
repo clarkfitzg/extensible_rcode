@@ -34,7 +34,9 @@ and with respect to the three functions in the diagram:
 - scheduling algorithm
 - code generator
 
-This document demonstrates
+This document demonstrates incremental steps to make functions more
+extensible and customizable.
+
 
 ## Simple
 
@@ -113,11 +115,37 @@ served by object oriented programming. These two approaches share the
 common problem of not generalizing the behavior of the underlying function
 `task_graph`.
 
+## Passing Arguments Through
 
-## Extensibility
+The scheduler happens to be the most complex step in the process, and we
+would like to provide a way for users to easily control these parameters.
+R's ellipses `...` provide a mechanism for this.
+Note that it really only makes sense to use this with a single function.
+
+```{r}
+task_parallel = function(code, ...)
+{
+    tg = task_graph(code)
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}
+```
+
+Now if a user wants to specify another argument to the scheduling step, say
+`maxworkers = 3L` to create a schedule with three workers they can easily
+do this:
+
+```{r}
+newcode = task_parallel(code, maxworkers = 3L)
+```
+
+![dots model](dots_model.png)
+
+
+## Customizability
 
 In the original computational model the scheduling algorithm and the code
-generation are meant to be modular. Users can extend the capabilties of the
+generation are meant to be modular. Users can customize the
 system by supplying their own functions that implement scheduling or code
 generation.
 
@@ -126,11 +154,11 @@ generation.
 The code becomes:
 
 ```{r}
-task_parallel = function(code, scheduler = default_scheduler,
+task_parallel = function(code, scheduler = default_scheduler, ...
     code_generator = default_code_generator)
 {
     tg = task_graph(code)
-    sc = scheduler(tg)
+    sc = scheduler(tg, ...)
     code_generator(sc)
 }
 ```
@@ -142,5 +170,26 @@ Now users can define and use their own scheduling algorithms, for example
 newcode = task_parallel(code, genetic_scheduler)
 ```
 
+Suppose the user wants to modify some part of the pipeline. If the user has
+a schedule in hand then they can directly call the code generator, and
+there's no need to use `task_parallel`. But they may want to modify the
+task graph and pass this directly in. R evaluates arguments lazily, so we
+can allow users to pass in a task graph by lifting the first line in the
+body of the function into an argument:
 
-## Customizability
+```{r}
+task_parallel = function(code, tg = task_graph(code), scheduler = default_scheduler,
+    ..., code_generator = default_code_generator)
+{
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}
+```
+
+
+## Extensibility
+
+Some schedulers must be tied to their code generators. For example,
+`fork_join` is a scheduling algorithm that returns a more specialized
+schedule that supports a particular type of code generator. So we don't
+want to use the `default_scheduler`.
