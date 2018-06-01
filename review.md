@@ -2,18 +2,19 @@
 
 TODO: I'm still not clear on how Duncan distinguishes between customizable
 and extensible.
-   By extensible, I am referring to infrastructure and more specifically  extensibility via class
-   extension/subclassing/interfaces in the OOP world.  So we can extend the existing code base
-   without modifying it by defining one or more new classes (typically derived from an existing
-   class) and then providing methods for this new class. Then we create a new instance of our new
-   class and pass it into the existing system and the new methods get invoked appropriately.
 
-    By customizable, I mean that we can control the behaviour of a function via its parameters,
-	and specifically, that we can pass a function in to the function that is used to do a particular
-	step in that function. The example we discussed was your scheduler parameter which takes a
-	function that computes the schedule.  By being able to provide a function, we don't have to
-	define a new class and a new method and then create an instance of that new class to get our new
-	method invoked. The function is more direct, dynamic and ephemeral. It is in effect for this function call.
+By extensible, I am referring to infrastructure and more specifically  extensibility via class
+extension/subclassing/interfaces in the OOP world.  So we can extend the existing code base
+without modifying it by defining one or more new classes (typically derived from an existing
+class) and then providing methods for this new class. Then we create a new instance of our new
+class and pass it into the existing system and the new methods get invoked appropriately.
+
+By customizable, I mean that we can control the behaviour of a function via its parameters,
+and specifically, that we can pass a function in to the function that is used to do a particular
+step in that function. The example we discussed was your scheduler parameter which takes a
+function that computes the schedule.  By being able to provide a function, we don't have to
+define a new class and a new method and then create an instance of that new class to get our new
+method invoked. The function is more direct, dynamic and ephemeral. It is in effect for this function call.
 	
 	
    
