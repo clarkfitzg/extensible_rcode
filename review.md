@@ -196,7 +196,7 @@ can allow users to pass in a task graph by lifting the first line in the
 body of the function into an argument:
 
 ```{r}
-task_parallel = function(code, tg = task_graph(code), scheduler = default_scheduler,
+task_parallel = function(code, taskgraph = task_graph(code), scheduler = default_scheduler,
     ..., code_generator = default_code_generator)
 {
     sc = scheduler(tg, ...)
@@ -207,11 +207,9 @@ task_parallel = function(code, tg = task_graph(code), scheduler = default_schedu
 
 ## Extensibility
 
-Some schedulers must be tied to their code generators. For example,
-`fork_join_schedule` is a scheduling algorithm that returns a more
-specialized schedule that supports a particular type of code generator.
-Then we don't want to use the `default_code_generator`. We want the runtime
+Some schedulers must be tied to their code generators. We want the runtime
 to figure out what the most appropriate code generator is and use that.
+
 This is where the extensibility through object oriented programming comes
 in.
 
@@ -250,7 +248,7 @@ schedule.default = function(taskgraph, maxworkers, ...)
 The primary function becomes:
 
 ```{r}
-task_parallel = function(code, tg = task_graph(code),
+task_parallel = function(code, taskgraph = task_graph(code),
     scheduler = schedule, ..., code_generator = generate_code)
 {
     sc = scheduler(tg, ...)
@@ -258,12 +256,15 @@ task_parallel = function(code, tg = task_graph(code),
 }
 ```
 
-Now we can do some wonderful things. For example, the _user_ __OR__ the
+Now we can do some wonderful things. For example, `fork_join_schedule` is a
+scheduling algorithm that returns a more specialized schedule that supports
+a particular type of code generator. Then we don't want to use the
+`default_code_generator`. By using a generic function the _user_ __OR__ the
 package author can define a scheduling algorithm with an associated
 implementation as follows:
 
 ```{r}
-fork_join_schedule = function(taskgraph, maxworkers, ...)
+fork_join_schedule = function(taskgraph, maxworkers = 2L, ...)
 {
     # ... more code here ...
     class(result) = c("ForkJoinSchedule", "Schedule")
@@ -276,4 +277,98 @@ generate_code.ForkJoinSchedule = function(schedule, ...)
 }
 ```
 
-TODO: Draw conceptual graph.
+Then we can use this as follows:
+
+```{r}
+task_parallel(code, scheduler = fork_join_schedule)
+```
+
+`fork_join_schedule` creates an object of class `ForkJoinSchedule`, and
+`generate_code` will dispatch to the specialized method. These objects
+become implicitly tied together which is what we wanted.
+
+![extensible](extensible.png)
+
+## Summary
+
+We started with a function `task_parallel` that could only be called in one
+simple way:
+
+- `task_parallel(code)`.
+
+We preserved this simple behavior and extended it so that users can do any
+of the following:
+
+- `task_parallel("some_script.R")` methods for different classes of
+  the first argument.
+- `task_parallel(taskgraph = tg)` skips the setup part of the function in
+  case the user has already done that or they have a special task graph to
+  use.
+- `task_parallel(code, schedule = my_scheduler, code_generator =
+  my_code_generator)` allows users to customize the steps in the process
+    by passing in their own functions to perform them.
+- `task_parallel(code, schedule = fork_join_schedule)` dispatches on the
+  class allowing users to extend the system through defining their own
+  classes.
+
+This style of code accommodates three increasingly sophisticated classes of
+users:
+
+1. Users who just want to call it as a black box
+2. Users who understand the model and would like to experiment by passing
+   in new functions.
+3. Users who would like to extend and build upon the system by writing
+   methods and using object oriented programming techniques.
+
+The final version of the code supports all of these use cases
+simultaneously. Further, we don't force users to do it in any particular
+way. This is nice as each usage style has its merits.
+
+## Appendix - Final code
+
+```{r}
+task_graph = function(code, ...)
+{
+    UseMethod("task_graph")
+}
+
+task_graph.character = function(code, ...)
+{
+    # ... Disambiguate file names from a character vector
+    task_graph(parse(filename))
+}
+    
+task_graph.expression = function(code, ...)
+{
+    # The actual work of building a task graph
+}
+
+generate_code = function(schedule, ...)
+{
+    UseMethod("generate_code")
+}
+
+generate_code.default = function(schedule, ...)
+{
+    # ... more code here ...
+}
+
+schedule = function(taskgraph, maxworkers = 2L, ...)
+{
+    UseMethod("schedule")
+}
+
+schedule.default = function(taskgraph, maxworkers, ...)
+{
+    # ... more code here ...
+    class(result) = "schedule"
+    result
+}
+
+task_parallel = function(code, taskgraph = task_graph(code),
+    scheduler = schedule, ..., code_generator = generate_code)
+{
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}
+```
