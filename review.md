@@ -126,7 +126,7 @@ in two other ways, both of which have
 problems. First, we could make `task_parallel` itself a method that
 dispatched on the class of `code`. This will confuse things when we
 generalize `task_parallel` later. Second, we could add statements of the
-form `if(class(code)) == "character"` inside the body of `task_parallel`.
+form `if(class(code) == "character")` inside the body of `task_parallel`.
 This might be warranted if we're sure that the conditions are simple and
 will stay simple, but when they grow more complex we will be better
 served by object oriented programming. These two approaches share the
@@ -208,6 +208,72 @@ task_parallel = function(code, tg = task_graph(code), scheduler = default_schedu
 ## Extensibility
 
 Some schedulers must be tied to their code generators. For example,
-`fork_join` is a scheduling algorithm that returns a more specialized
-schedule that supports a particular type of code generator. So we don't
-want to use the `default_scheduler`.
+`fork_join_schedule` is a scheduling algorithm that returns a more
+specialized schedule that supports a particular type of code generator.
+Then we don't want to use the `default_code_generator`. We want the runtime
+to figure out what the most appropriate code generator is and use that.
+This is where the extensibility through object oriented programming comes
+in.
+
+We change the _package code_ as follows:
+
+```{r}
+generate_code = function(schedule, ...)
+{
+    UseMethod("generate_code")
+}
+
+generate_code.default = function(schedule, ...)
+{
+    # ... more code here ...
+}
+```
+
+At this point two of the three steps in the process use methods, so we may
+as well make the scheduling step a method as well for consistency, even
+though we don't expect to dispatch on many different classes of taskgraph.
+
+```{r}
+schedule = function(taskgraph, maxworkers = 2L, ...)
+{
+    UseMethod("schedule")
+}
+
+schedule.default = function(taskgraph, maxworkers, ...)
+{
+    # ... more code here ...
+    class(result) = "schedule"
+    result
+}
+```
+
+The primary function becomes:
+
+```{r}
+task_parallel = function(code, tg = task_graph(code),
+    scheduler = schedule, ..., code_generator = generate_code)
+{
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}
+```
+
+Now we can do some wonderful things. For example, the _user_ __OR__ the
+package author can define a scheduling algorithm with an associated
+implementation as follows:
+
+```{r}
+fork_join_schedule = function(taskgraph, maxworkers, ...)
+{
+    # ... more code here ...
+    class(result) = c("ForkJoinSchedule", "Schedule")
+    result
+}
+
+generate_code.ForkJoinSchedule = function(schedule, ...)
+{
+    # ... more code here ...
+}
+```
+
+TODO: Draw conceptual graph.
