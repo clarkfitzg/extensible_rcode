@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Duncan Temple Lang, Clark Fitzgerald" />
+  <meta name="dcterms.date" content="2018-06-04" />
+  <title>Customizable and Extensible Code</title>
+  <style type="text/css">
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.line-block{white-space: pre-line;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header>
+<h1 class="title">Customizable and Extensible Code</h1>
+<p class="author">Duncan Temple Lang, Clark Fitzgerald</p>
+<p class="date">4 June 2018</p>
+</header>
+<p>TODO:</p>
+<ul>
+<li>changing <code>if(class(...</code> to <code>as()</code></li>
+<li>Calling <code>I()</code> on arguments to control behavior</li>
+</ul>
+<p>By customizable, we mean that we can control the behaviour of a function via its parameters, and specifically, that we can pass a function in to the function that is used to do a particular step in that function. Below we discuss the scheduler parameter which takes a function that computes the schedule. By being able to provide a function, we don’t have to define a new class and a new method and then create an instance of that new class to get our new method invoked. The function is more direct, dynamic and ephemeral. It is in effect for this function call.</p>
+<p>By extensible, we are referring to infrastructure and more specifically extensibility via class extension/subclassing/interfaces in the Object Oriented Programming (OOP) world. So we can extend the existing code base without modifying it by defining one or more new classes (typically derived from an existing class) and then providing methods for this new class. Then we create a new instance of our new class and pass it into the existing system and the new methods get invoked appropriately.</p>
+<h2 id="application">Application</h2>
+<p>We’ll explore these concepts in the context of a concrete example. The software described below transforms regular R code into a version that uses task parallelism, which means that different code blocks execute simultaneously. This graph illustrates the steps:</p>
+<figure>
+<img src="basic_model.png" alt="basic model" /><figcaption>basic model</figcaption>
+</figure>
+<p>The package contains a function <code>task_parallel</code> implementing the above steps, so users write:</p>
+<pre class="{r}"><code>newcode = task_parallel(oldcode)</code></pre>
+<p>We discuss how to design this function <code>task_parallel</code> to be flexibile and customizable with respect to the four objects in the diagram:</p>
+<ul>
+<li>input code</li>
+<li>task graph</li>
+<li>schedule</li>
+<li>output code</li>
+</ul>
+<p>and with respect to the three functions in the diagram:</p>
+<ul>
+<li>dependency analysis</li>
+<li>scheduling algorithm</li>
+<li>code generator</li>
+</ul>
+<p>This document demonstrates incremental steps to make functions more extensible and customizable.</p>
+<h2 id="simple">Simple</h2>
+<p>Here’s the simplest way to implement <code>task_parallel</code>:</p>
+<pre class="{r}"><code>task_parallel = function(code)
+{
+    tg = task_graph(code)
+    sc = scheduler(tg)
+    code_generator(sc)
+}</code></pre>
+<p>This has the advantage of convenience for the user, because it implies the following mental model.</p>
+<figure>
+<img src="simple.png" alt="simple model" /><figcaption>simple model</figcaption>
+</figure>
+<p><code>task_parallel()</code> is a black box, completely abstracted away. The user only controls what code they pass in. Sometimes this level of abstraction is entirely appropriate, as we don’t want to force users to have to understand all aspects of the implementation. Indeed, the entire purpose of a function is to provide a convenient abstraction. The problem with this implementation is that it fixes the scheduling algorithm and code generator so that the user has no control over the behavior of the <code>task_parallel</code> function.</p>
+<p>As we make the function customizable and extensible we would like to always keep this simple behavior that allows users to write <code>autoparallel(code)</code>. It’s convenient, it’s the most common use case, and it includes users who don’t care about understanding any of the underlying mental models, they just want the end result.</p>
+<h2 id="multiple-inputs">Multiple Inputs</h2>
+<p>The user may prefer to pass in different types of input to <code>task_parallel</code>. For example, they may have the name of a file containing code, a bunch of code in a character vector, or maybe a language object produced by R’s <code>parse()</code> function.</p>
+<figure>
+<img src="multiple_inputs.png" alt="multiple inputs model" /><figcaption>multiple inputs model</figcaption>
+</figure>
+<p>We can keep the current definition for <code>task_parallel</code> and achieve this behavior by making <code>task_graph</code> a generic function. This means <code>task_graph</code> will dispatch on the class of the input <code>code</code>. This is a better choice than making <code>task_parallel</code> a generic function, because then <code>task_graph</code> becomes flexible and propagates this flexibility through to the calling function <code>task_parallel</code>. In S3 our code might look like the following:</p>
+<pre class="{r}"><code>task_graph = function(code, ...)
+{
+    UseMethod(&quot;task_graph&quot;)
+}
+
+task_graph.character = function(code, ...)
+{
+    # ... Disambiguate file names from a character vector of unparsed code
+    TODO: use of I() here
+    task_graph(parse(filename))
+}
+    
+task_graph.expression = function(code, ...)
+{
+    # The actual work of building a task graph
+}</code></pre>
+<h2 id="passing-arguments-through">Passing Arguments Through</h2>
+<p>The scheduler happens to be the most complex step in the process, and we would like to provide a way for users to easily control these parameters. R’s ellipses <code>...</code> provide a mechanism for this. Note that it really only makes sense to use this with a single function.</p>
+<pre class="{r}"><code>task_parallel = function(code, ...)
+{
+    tg = task_graph(code)
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}</code></pre>
+<p>Now if a user wants to specify another argument to the scheduling step, say <code>maxworkers = 3L</code> to create a schedule with three workers they can easily do this:</p>
+<pre class="{r}"><code>newcode = task_parallel(code, maxworkers = 3L)</code></pre>
+<figure>
+<img src="dots_model.png" alt="dots model" /><figcaption>dots model</figcaption>
+</figure>
+<p>We could take this further and pass in further arguments in the form of a list from <code>task_parallel</code> in to the other steps <code>task_graph</code> and <code>code_generator</code>. We are not doing this at the moment for two reasons. First, we don’t currently see a need for specifying many arguments for these two functions. Second, it’s easy to add later without breaking anything.</p>
+<h2 id="customizability">Customizability</h2>
+<p>In the original computational model the scheduling algorithm and the code generation are meant to be modular. Users can customize the system by supplying their own functions that implement scheduling or code generation.</p>
+<figure>
+<img src="modular_model.png" alt="modular model" /><figcaption>modular model</figcaption>
+</figure>
+<p>The code becomes:</p>
+<pre class="{r}"><code>task_parallel = function(code, scheduler = default_scheduler, ...
+    code_generator = default_code_generator)
+{
+    tg = task_graph(code)
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}</code></pre>
+<p>Now users can define and use their own scheduling algorithms, for example <code>genetic_scheduler</code> that uses a genetic algorithm.</p>
+<pre class="{r}"><code>newcode = task_parallel(code, genetic_scheduler)</code></pre>
+<p>Suppose the user wants to modify some part of the pipeline. If the user has a schedule in hand then they can directly call the code generator, and there’s no need to use <code>task_parallel</code>. But they may want to modify the task graph and pass this directly in. R evaluates arguments lazily, so we can allow users to pass in a task graph by lifting the first line in the body of the function into a default parameter:</p>
+<pre class="{r}"><code>task_parallel = function(code, taskgraph = task_graph(code), scheduler = default_scheduler,
+    ..., code_generator = default_code_generator)
+{
+    sc = scheduler(taskgraph, ...)
+    code_generator(sc)
+}</code></pre>
+<p>We could even lift several lines into default parameters, provided that we avoid circular references.</p>
+<h2 id="extensibility">Extensibility</h2>
+<p>Some schedulers must be tied to their code generators. We want the runtime to figure out what the most appropriate code generator is and use that. This is where the extensibility through object oriented programming comes in. We change the <strong>package code</strong> as follows:</p>
+<pre class="{r}"><code>generate_code = function(schedule, ...)
+{
+    UseMethod(&quot;generate_code&quot;)
+}
+
+generate_code.default = function(schedule, ...)
+{
+    # ... more code here ...
+}</code></pre>
+<p>At this point two of the three steps in the model use methods. We may as well be consistent and make the scheduling step a method, even though we don’t expect to dispatch on many different classes of task graphs.</p>
+<pre class="{r}"><code>schedule = function(taskgraph, maxworkers = 2L, ...)
+{
+    UseMethod(&quot;schedule&quot;)
+}
+
+schedule.default = function(taskgraph, maxworkers, ...)
+{
+    # ... more code here ...
+    class(result) = &quot;Schedule&quot;
+    result
+}</code></pre>
+<p>The primary function becomes:</p>
+<pre class="{r}"><code>task_parallel = function(code, taskgraph = task_graph(code),
+    scheduler = schedule, ..., code_generator = generate_code)
+{
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}</code></pre>
+<p>Now we can extend the system through object oriented programming. For example, <code>fork_join_schedule</code> is a scheduling algorithm that returns a more specialized schedule that supports a particular type of code generator. Then we don’t want to use the <code>default_code_generator</code>. By using a generic function the <em>user</em> <strong>OR</strong> the package author can define a scheduling algorithm with an associated implementation as follows:</p>
+<pre class="{r}"><code>fork_join_schedule = function(taskgraph, maxworkers = 2L, ...)
+{
+    # ... more code here ...
+    class(result) = c(&quot;ForkJoinSchedule&quot;, &quot;Schedule&quot;)
+    result
+}
+
+generate_code.ForkJoinSchedule = function(schedule, ...)
+{
+    # ... more code here ...
+}</code></pre>
+<p>We can call this new code as follows:</p>
+<pre class="{r}"><code>task_parallel(code, scheduler = fork_join_schedule)</code></pre>
+<p><code>fork_join_schedule</code> creates an object of class <code>ForkJoinSchedule</code>, and <code>generate_code</code> will dispatch to the specialized method. These objects become implicitly tied together which is what we wanted.</p>
+<figure>
+<img src="extensible.png" alt="extensible" /><figcaption>extensible</figcaption>
+</figure>
+<h2 id="summary">Summary</h2>
+<p>We started with a function <code>task_parallel</code> that could only be called in one simple way:</p>
+<ul>
+<li><code>task_parallel(code)</code>.</li>
+</ul>
+<p>We preserved this desirable simple behavior and extended it so that users can do any of the following:</p>
+<ul>
+<li><code>task_parallel(&quot;some_script.R&quot;)</code> methods for different classes of the first argument.</li>
+<li><code>task_parallel(taskgraph = tg)</code> skips the setup part of the function in case the user has already done that or they have a special task graph to use.</li>
+<li><code>task_parallel(code, schedule = my_scheduler, code_generator = my_code_generator)</code> allows users to customize the steps in the process by passing in their own functions to perform them.</li>
+<li><code>task_parallel(code, schedule = fork_join_schedule)</code> dispatches on the class allowing users to extend the system through defining their own classes.</li>
+</ul>
+<p>This style of code accommodates three increasingly sophisticated classes of users:</p>
+<ol type="1">
+<li>Users who just want to treat it as a black box</li>
+<li>Users who understand the model and would like to experiment by passing in new functions</li>
+<li>Users who would like to extend and build upon the system by writing methods and using object oriented programming techniques</li>
+</ol>
+<p>The final version of the code supports all of these use cases simultaneously. Further, we don’t force users to do it in any particular way. This is nice as each usage style has its merits.</p>
+<h2 id="appendix---final-code">Appendix - Final code</h2>
+<pre class="{r}"><code># Different inputs
+#------------------------------------------------------------
+
+task_graph = function(code, ...)
+{
+    UseMethod(&quot;task_graph&quot;)
+}
+
+task_graph.character = function(code, ...)
+{
+    # ... Disambiguate file names from a character vector
+    task_graph(parse(filename))
+}
+    
+task_graph.expression = function(code, ...)
+{
+    # The actual work of building a task graph
+}
+
+
+# Allows extension through intermediate objects
+#------------------------------------------------------------
+
+generate_code = function(schedule, ...)
+{
+    UseMethod(&quot;generate_code&quot;)
+}
+
+generate_code.default = function(schedule, ...)
+{
+    # ... more code here ...
+}
+
+schedule = function(taskgraph, maxworkers = 2L, ...)
+{
+    UseMethod(&quot;schedule&quot;)
+}
+
+schedule.default = function(taskgraph, maxworkers, ...)
+{
+    # ... more code here ...
+    class(result) = &quot;Schedule&quot;
+    result
+}
+
+
+# Final user facing function
+#------------------------------------------------------------
+
+task_parallel = function(code, taskgraph = task_graph(code),
+    scheduler = schedule, ..., code_generator = generate_code)
+{
+    sc = scheduler(tg, ...)
+    code_generator(sc)
+}</code></pre>
+</body>
+</html>

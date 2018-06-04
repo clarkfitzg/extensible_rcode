@@ -4,9 +4,6 @@ rankdir = LR;
 
 //edge [fontname = "courier"];
 
-label = "Rectangles represent data structures
-Ovals represent functions
-";
 labeljust=right;
 
 node [shape = "rectangle"];
